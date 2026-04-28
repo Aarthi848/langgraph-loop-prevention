@@ -1,15 +1,19 @@
 """
 OOPS Concepts in Python
 =======================
-This file demonstrates the four pillars of Object-Oriented Programming:
+This file demonstrates Object-Oriented Programming concepts:
 1. Encapsulation
 2. Inheritance
 3. Polymorphism
 4. Abstraction
+5. Composition
+6. Aggregation
+7. Decorators
+8. Dunder (Magic) Methods
 """
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 
 # ==================== ENCAPSULATION ====================
@@ -248,6 +252,352 @@ class Developer(Employee):
         return f"Writing code in {self.programming_language}"
 
 
+# ==================== COMPOSITION ====================
+class Engine:
+    """Component class - part of a Car (Composition)"""
+    
+    def __init__(self, horsepower: int, fuel_type: str):
+        self.horsepower = horsepower
+        self.fuel_type = fuel_type
+        self.__is_running = False
+    
+    def start(self) -> str:
+        self.__is_running = True
+        return f"Engine started! {self.horsepower}HP {self.fuel_type} engine running."
+    
+    def stop(self) -> str:
+        self.__is_running = False
+        return "Engine stopped."
+    
+    def get_status(self) -> bool:
+        return self.__is_running
+
+
+class Wheel:
+    """Component class - part of a Car (Composition)"""
+    
+    def __init__(self, size: int, pressure: float = 32.0):
+        self.size = size
+        self.pressure = pressure
+    
+    def inflate(self, psi: float) -> None:
+        self.pressure = psi
+        print(f"Wheel inflated to {self.pressure} PSI")
+
+
+class Car:
+    """Composition: Car OWNS Engine and Wheels — they cannot exist without the Car"""
+    
+    def __init__(self, brand: str, model: str, horsepower: int, fuel_type: str):
+        self.brand = brand
+        self.model = model
+        # Engine and Wheels are CREATED INSIDE Car — this is Composition
+        self.__engine = Engine(horsepower, fuel_type)
+        self.__wheels = [Wheel(18) for _ in range(4)]
+    
+    def start_engine(self) -> str:
+        return f"{self.brand} {self.model}: {self.__engine.start()}"
+    
+    def stop_engine(self) -> str:
+        return f"{self.brand} {self.model}: {self.__engine.stop()}"
+    
+    def inflate_tires(self, psi: float) -> None:
+        for wheel in self.__wheels:
+            wheel.inflate(psi)
+        print(f"All 4 tires inflated to {psi} PSI")
+
+
+# ==================== AGGREGATION ====================
+class Student:
+    """Part class - can exist independently of Classroom (Aggregation)"""
+    
+    def __init__(self, name: str, student_id: str):
+        self.name = name
+        self.student_id = student_id
+        self.__grades: List[float] = []
+    
+    def add_grade(self, grade: float) -> None:
+        if 0 <= grade <= 100:
+            self.__grades.append(grade)
+    
+    def get_average(self) -> float:
+        if not self.__grades:
+            return 0.0
+        return sum(self.__grades) / len(self.__grades)
+    
+    def __str__(self) -> str:
+        return f"Student({self.name}, ID: {self.student_id}, Avg: {self.get_average():.1f})"
+
+
+class Classroom:
+    """Aggregation: Classroom HAS Students, but Students exist INDEPENDENTLY"""
+    
+    def __init__(self, room_number: str, teacher: str):
+        self.room_number = room_number
+        self.teacher = teacher
+        self.students: List[Student] = []  # Students are PASSED IN, not created here
+    
+    def add_student(self, student: Student) -> None:
+        """Student exists outside — we just reference it (Aggregation)"""
+        if student not in self.students:
+            self.students.append(student)
+            print(f"{student.name} added to Classroom {self.room_number}")
+    
+    def remove_student(self, student: Student) -> None:
+        """Removing from classroom does NOT destroy the student"""
+        if student in self.students:
+            self.students.remove(student)
+            print(f"{student.name} removed from Classroom {self.room_number}")
+    
+    def list_students(self) -> None:
+        print(f"Classroom {self.room_number} (Teacher: {self.teacher}):")
+        for student in self.students:
+            print(f"  - {student}")
+
+
+# ==================== DECORATORS ====================
+def log_method_call(func):
+    """Decorator: Logs method calls with arguments"""
+    def wrapper(*args, **kwargs):
+        class_name = args[0].__class__.__name__ if args else ""
+        method_name = func.__name__
+        print(f"[LOG] Calling {class_name}.{method_name}()")
+        result = func(*args, **kwargs)
+        print(f"[LOG] {class_name}.{method_name}() returned: {result}")
+        return result
+    return wrapper
+
+
+def validate_input(func):
+    """Decorator: Validates that numeric inputs are positive"""
+    def wrapper(*args, **kwargs):
+        for arg in args[1:]:  # Skip 'self'
+            if isinstance(arg, (int, float)) and arg < 0:
+                raise ValueError(f"Negative value not allowed: {arg}")
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def retry(max_retries: int = 3):
+    """Decorator Factory: Retries a method on failure"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    print(f"[RETRY] Attempt {attempt}/{max_retries} failed: {e}")
+                    if attempt == max_retries:
+                        print(f"[RETRY] All {max_retries} attempts exhausted!")
+                        raise
+        return wrapper
+    return decorator
+
+
+class ProductService:
+    """Demonstrates decorators applied to methods"""
+    
+    def __init__(self):
+        self.__products = {}
+    
+    @log_method_call
+    def add_product(self, name: str, price: float) -> str:
+        self.__products[name] = price
+        return f"Product '{name}' added at ${price}"
+    
+    @validate_input
+    def apply_discount(self, price: float, discount_percent: float) -> float:
+        discounted = price * (1 - discount_percent / 100)
+        return round(discounted, 2)
+    
+    @retry(max_retries=3)
+    def fetch_product(self, name: str) -> float:
+        """Simulates an unreliable fetch — may fail randomly"""
+        import random
+        if random.random() < 0.5:
+            raise ConnectionError("Network error!")
+        if name in self.__products:
+            return self.__products[name]
+        raise KeyError(f"Product '{name}' not found")
+
+
+class Timer:
+    """Decorator as a class: Measures execution time"""
+    
+    def __init__(self, func):
+        self.func = func
+        self.__name__ = func.__name__
+    
+    def __call__(self, *args, **kwargs):
+        import time
+        start = time.perf_counter()
+        result = self.func(*args, **kwargs)
+        elapsed = time.perf_counter() - start
+        print(f"[TIMER] {self.__name__} took {elapsed:.6f} seconds")
+        return result
+
+
+@Timer
+def slow_calculation(n: int) -> int:
+    """Function decorated with Timer class"""
+    total = sum(range(n))
+    return total
+
+
+# ==================== DUNDER (MAGIC) METHODS ====================
+class Vector:
+    """Demonstrates operator overloading using dunder methods"""
+    
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
+    
+    def __str__(self) -> str:
+        """String representation for print()"""
+        return f"Vector({self.x}, {self.y})"
+    
+    def __repr__(self) -> str:
+        """Official representation for debugging"""
+        return f"Vector(x={self.x}, y={self.y})"
+    
+    def __add__(self, other: 'Vector') -> 'Vector':
+        """Overloads + operator"""
+        return Vector(self.x + other.x, self.y + other.y)
+    
+    def __sub__(self, other: 'Vector') -> 'Vector':
+        """Overloads - operator"""
+        return Vector(self.x - other.x, self.y - other.y)
+    
+    def __mul__(self, scalar: float) -> 'Vector':
+        """Overloads * operator (scalar multiplication)"""
+        return Vector(self.x * scalar, self.y * scalar)
+    
+    def __eq__(self, other: object) -> bool:
+        """Overloads == operator"""
+        if not isinstance(other, Vector):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
+    
+    def __lt__(self, other: 'Vector') -> bool:
+        """Overloads < operator (compares magnitude)"""
+        return self.magnitude() < other.magnitude()
+    
+    def __le__(self, other: 'Vector') -> bool:
+        """Overloads <= operator"""
+        return self.magnitude() <= other.magnitude()
+    
+    def magnitude(self) -> float:
+        """Returns the magnitude of the vector"""
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+    
+    def __len__(self) -> int:
+        """len() — returns number of dimensions"""
+        return 2
+    
+    def __getitem__(self, index: int) -> float:
+        """Indexing: v[0] → x, v[1] → y"""
+        if index == 0:
+            return self.x
+        elif index == 1:
+            return self.y
+        else:
+            raise IndexError("Vector index out of range (0 or 1)")
+    
+    def __bool__(self) -> bool:
+        """Truthiness: zero vector is False, else True"""
+        return self.x != 0 or self.y != 0
+    
+    def __abs__(self) -> float:
+        """abs() — returns magnitude"""
+        return self.magnitude()
+    
+    def __hash__(self) -> int:
+        """Makes Vector hashable (can be used in sets/dicts)"""
+        return hash((self.x, self.y))
+
+
+class Bookshelf:
+    """Demonstrates container dunder methods"""
+    
+    def __init__(self):
+        self.__books: List[str] = []
+    
+    def __len__(self) -> int:
+        """len(bookshelf)"""
+        return len(self.__books)
+    
+    def __getitem__(self, index: int) -> str:
+        """bookshelf[i]"""
+        return self.__books[index]
+    
+    def __setitem__(self, index: int, value: str) -> None:
+        """bookshelf[i] = value"""
+        self.__books[index] = value
+    
+    def __delitem__(self, index: int) -> None:
+        """del bookshelf[i]"""
+        del self.__books[index]
+    
+    def __contains__(self, item: str) -> bool:
+        """'Book Title' in bookshelf"""
+        return item in self.__books
+    
+    def __iter__(self):
+        """for book in bookshelf:"""
+        return iter(self.__books)
+    
+    def __bool__(self) -> bool:
+        """if bookshelf: (True if not empty)"""
+        return len(self.__books) > 0
+    
+    def add_book(self, title: str) -> None:
+        self.__books.append(title)
+    
+    def __str__(self) -> str:
+        return f"Bookshelf with {len(self.__books)} books: {', '.join(self.__books)}"
+
+
+class Money:
+    """Demonstrates __format__ and __round__ dunder methods"""
+    
+    def __init__(self, amount: float, currency: str = "USD"):
+        self.amount = amount
+        self.currency = currency
+    
+    def __str__(self) -> str:
+        return f"{self.currency} {self.amount:.2f}"
+    
+    def __repr__(self) -> str:
+        return f"Money({self.amount}, '{self.currency}')"
+    
+    def __format__(self, format_spec: str) -> str:
+        """Custom formatting: format(money, '.0f') or format(money, 'symbol')"""
+        if format_spec == "symbol":
+            symbols = {"USD": "$", "EUR": "€", "GBP": "£", "INR": "₹"}
+            sym = symbols.get(self.currency, self.currency)
+            return f"{sym}{self.amount:.2f}"
+        return format(self.amount, format_spec) + f" {self.currency}"
+    
+    def __round__(self, ndigits: int = 0) -> 'Money':
+        """round(money, 2)"""
+        return Money(round(self.amount, ndigits), self.currency)
+    
+    def __add__(self, other: 'Money') -> 'Money':
+        if self.currency != other.currency:
+            raise ValueError(f"Cannot add {self.currency} and {other.currency}")
+        return Money(self.amount + other.amount, self.currency)
+    
+    def __sub__(self, other: 'Money') -> 'Money':
+        if self.currency != other.currency:
+            raise ValueError(f"Cannot subtract {self.currency} and {other.currency}")
+        return Money(self.amount - other.amount, self.currency)
+    
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Money):
+            return NotImplemented
+        return self.amount == other.amount and self.currency == other.currency
+
+
 # ==================== DEMONSTRATION ====================
 if __name__ == "__main__":
     print("=" * 60)
@@ -304,6 +654,94 @@ if __name__ == "__main__":
         print(f"Work: {emp.work()}")
         print(f"Salary: ${emp.calculate_salary():.2f}\n")
     
-    print("=" * 60)
+    # 5. Composition
+    print("\n5. COMPOSITION")
+    print("-" * 40)
+    car = Car("Toyota", "Camry", 203, "Gasoline")
+    print(car.start_engine())
+    car.inflate_tires(35.0)
+    print(car.stop_engine())
+    print("Note: Engine & Wheels are DESTROYED when Car is destroyed (owns them)")
+    
+    # 6. Aggregation
+    print("\n6. AGGREGATION")
+    print("-" * 40)
+    student1 = Student("Rahul", "STU001")
+    student2 = Student("Priya", "STU002")
+    student3 = Student("Amit", "STU003")
+    
+    student1.add_grade(85)
+    student1.add_grade(92)
+    student2.add_grade(78)
+    student2.add_grade(88)
+    student3.add_grade(95)
+    
+    classroom = Classroom("Room 101", "Dr. Sharma")
+    classroom.add_student(student1)
+    classroom.add_student(student2)
+    classroom.add_student(student3)
+    classroom.list_students()
+    
+    classroom.remove_student(student2)
+    print(f"\n{student2} still exists independently after removal!")
+    
+    # 7. Decorators
+    print("\n7. DECORATORS")
+    print("-" * 40)
+    ps = ProductService()
+    ps.add_product("Laptop", 999.99)
+    
+    discounted = ps.apply_discount(999.99, 15)
+    print(f"15% off $999.99 = ${discounted}")
+    
+    print("\n--- Timer Decorator ---")
+    result = slow_calculation(1_000_000)
+    print(f"Sum of 0..999999 = {result}")
+    
+    # 8. Dunder Methods
+    print("\n8. DUNDER (MAGIC) METHODS")
+    print("-" * 40)
+    
+    # Vector operations
+    v1 = Vector(3, 4)
+    v2 = Vector(1, 2)
+    print(f"v1 = {v1}, v2 = {v2}")
+    print(f"v1 + v2 = {v1 + v2}")
+    print(f"v1 - v2 = {v1 - v2}")
+    print(f"v1 * 3 = {v1 * 3}")
+    print(f"v1 == Vector(3,4): {v1 == Vector(3, 4)}")
+    print(f"v1 < v2: {v1 < v2}")
+    print(f"len(v1) = {len(v1)}")
+    print(f"v1[0] = {v1[0]}, v1[1] = {v1[1]}")
+    print(f"abs(v1) = {abs(v1):.2f}")
+    print(f"bool(Vector(0,0)) = {bool(Vector(0, 0))}")
+    print(f"bool(v1) = {bool(v1)}")
+    
+    # Bookshelf operations
+    print("\n--- Bookshelf ---")
+    shelf = Bookshelf()
+    shelf.add_book("The Alchemist")
+    shelf.add_book("Rich Dad Poor Dad")
+    shelf.add_book("Atomic Habits")
+    print(f"Shelf: {shelf}")
+    print(f"len(shelf) = {len(shelf)}")
+    print(f"'Atomic Habits' in shelf: {'Atomic Habits' in shelf}")
+    print(f"shelf[0] = {shelf[0]}")
+    print("Iterating:")
+    for book in shelf:
+        print(f"  📖 {book}")
+    
+    # Money operations
+    print("\n--- Money ---")
+    price = Money(49.99, "USD")
+    tax = Money(4.50, "USD")
+    total = price + tax
+    print(f"Price: {price}")
+    print(f"Tax: {tax}")
+    print(f"Total: {total}")
+    print(f"Formatted (symbol): {format(total, 'symbol')}")
+    print(f"Rounded: {round(total, 1)}")
+    
+    print("\n" + "=" * 60)
     print("All OOPS concepts demonstrated successfully!")
     print("=" * 60)
